@@ -28,7 +28,7 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddApiEndpoints();
 
-        services.AddScoped<IEmailSender<ApplicationUser>, ConsoleEmailSender>();
+        services.AddSingleton<IEmailSender<ApplicationUser>, ConsoleEmailSender>();
 
         return services;
     }

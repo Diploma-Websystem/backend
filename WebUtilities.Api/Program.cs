@@ -1,22 +1,59 @@
 using AspNet.Security.OAuth.GitHub;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.OpenApi.Models;
 using Scalar.AspNetCore;
+using System.Security.Claims;
 using WebUtilities.Application;
 using WebUtilities.Core.Entities;
 using WebUtilities.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var googleClientId = builder.Configuration["Authentication:Google:ClientId"]
-    ?? throw new InvalidOperationException("Authentication:Google:ClientId is not configured.");
-var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
-    ?? throw new InvalidOperationException("Authentication:Google:ClientSecret is not configured.");
-var githubClientId = builder.Configuration["Authentication:GitHub:ClientId"]
-    ?? throw new InvalidOperationException("Authentication:GitHub:ClientId is not configured.");
-var githubClientSecret = builder.Configuration["Authentication:GitHub:ClientSecret"]
-    ?? throw new InvalidOperationException("Authentication:GitHub:ClientSecret is not configured.");
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, OpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Name = "Authorization",
+            Description = "JWT Bearer token"
+        };
 
-builder.Services.AddOpenApi();
+        return Task.CompletedTask;
+    });
+
+    options.AddOperationTransformer((operation, context, _) =>
+    {
+        var endpointMetadata = context.Description.ActionDescriptor.EndpointMetadata;
+        var hasAuthorize = endpointMetadata.OfType<IAuthorizeData>().Any();
+        var hasAllowAnonymous = endpointMetadata.OfType<IAllowAnonymous>().Any();
+
+        if (hasAuthorize && !hasAllowAnonymous)
+        {
+            operation.Security ??= new List<OpenApiSecurityRequirement>();
+            operation.Security.Add(new OpenApiSecurityRequirement
+            {
+                [new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Id = "Bearer",
+                        Type = ReferenceType.SecurityScheme
+                    }
+                }] = Array.Empty<string>()
+            });
+        }
+
+        return Task.CompletedTask;
+    });
+});
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactFrontend", policy =>
@@ -40,16 +77,28 @@ var authBuilder = builder.Services.AddAuthentication(options =>
 
 authBuilder.AddIdentityCookies();
 authBuilder.AddBearerToken(IdentityConstants.BearerScheme);
-authBuilder.AddGoogle(options =>
+
+var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
+{
+    authBuilder.AddGoogle(options =>
     {
         options.ClientId = googleClientId;
         options.ClientSecret = googleClientSecret;
-    })
-    .AddGitHub(options =>
+    });
+}
+
+var githubClientId = builder.Configuration["Authentication:GitHub:ClientId"];
+var githubClientSecret = builder.Configuration["Authentication:GitHub:ClientSecret"];
+if (!string.IsNullOrWhiteSpace(githubClientId) && !string.IsNullOrWhiteSpace(githubClientSecret))
+{
+    authBuilder.AddGitHub(options =>
     {
         options.ClientId = githubClientId;
         options.ClientSecret = githubClientSecret;
     });
+}
 
 builder.Services.AddAuthorization();
 
@@ -65,7 +114,24 @@ app.UseCors("ReactFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapIdentityApi<ApplicationUser>();
+var authGroup = app.MapGroup("/auth")
+    .WithTags("Authentication");
+
+authGroup.MapIdentityApi<ApplicationUser>();
+authGroup.MapGet("/me", [Authorize] (ClaimsPrincipal user) =>
+{
+    var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+    var email = user.FindFirstValue(ClaimTypes.Email)
+        ?? user.FindFirstValue(ClaimTypes.Name)
+        ?? string.Empty;
+
+    return Results.Ok(new
+    {
+        Id = userId,
+        Email = email
+    });
+});
+
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
