@@ -2,9 +2,12 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WebUtilities.Application.Interfaces;
 using WebUtilities.Core.Entities;
 using WebUtilities.Infrastructure.Data;
 using WebUtilities.Infrastructure.Identity;
+using WebUtilities.Infrastructure.Repositories;
+using WebUtilities.Infrastructure.Services;
 
 namespace WebUtilities.Infrastructure;
 
@@ -29,6 +32,12 @@ public static class DependencyInjection
             .AddApiEndpoints();
 
         services.AddSingleton<IEmailSender<ApplicationUser>, ConsoleEmailSender>();
+        services.AddScoped<IUrlRecordRepository, UrlRecordRepository>();
+        services.AddHttpClient<IIpGeolocationService, IpGeolocationService>(client =>
+        {
+            client.BaseAddress = new Uri("http://ip-api.com/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
 
         return services;
     }

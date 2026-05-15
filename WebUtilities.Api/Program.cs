@@ -12,6 +12,7 @@ using WebUtilities.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, _, _) =>
@@ -116,6 +117,7 @@ app.UseHttpsRedirection();
 app.UseCors("ReactFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapControllers();
 
 var authGroup = app.MapGroup("/auth")
     .WithTags("Authentication");

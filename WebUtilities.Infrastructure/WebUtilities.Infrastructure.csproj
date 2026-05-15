@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WebUtilities.Core\WebUtilities.Core.csproj" />
+    <ProjectReference Include="..\WebUtilities.Application\WebUtilities.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
